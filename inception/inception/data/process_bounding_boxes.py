@@ -177,9 +177,15 @@ if __name__ == '__main__':
         file=sys.stderr)
 
   if len(sys.argv) == 3:
-    labels = set([l.strip() for l in open(sys.argv[2]).readlines()])
-    print('Identified %d synset IDs in %s' % (len(labels), sys.argv[2]),
-          file=sys.stderr)
+    try:
+      lines = open(sys.argv[2]).readlines()
+    except IOError:
+      labels = [sys.argv[2]]
+      print('using %s' % labels[0])
+    else:
+      labels = set([l.strip() for l in lines])
+      print('Identified %d synset IDs in %s' % (len(labels), sys.argv[2]),
+            file=sys.stderr)
   else:
     labels = None
 

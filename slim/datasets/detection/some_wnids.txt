@@ -1,0 +1,29 @@
+# person
+http://imagenet.stanford.edu/synset?wnid=n00007846
+# bycicle
+http://imagenet.stanford.edu/synset?wnid=n02834778
+# car
+http://imagenet.stanford.edu/synset?wnid=n02958343
+# bird
+http://imagenet.stanford.edu/synset?wnid=n01503061
+# airplane
+http://imagenet.stanford.edu/synset?wnid=n02691156
+# bus
+http://imagenet.stanford.edu/synset?wnid=n02924116
+# cart
+http://imagenet.stanford.edu/synset?wnid=n02970849
+# dog
+http://imagenet.stanford.edu/synset?wnid=n02084071
+# motorcycle
+http://imagenet.stanford.edu/synset?wnid=n03790512
+# traffic light
+http://imagenet.stanford.edu/synset?wnid=n06874185
+# train
+http://imagenet.stanford.edu/synset?wnid=n04468005
+
+# all but Person and Dog and birds
+# n02834778,n02958343,n02691156,n02924116,n02970849,n03790512,n06874185,n04468005
+
+# all but Cars Dogs Birds
+# n02834778,n02691156,n02924116,n02970849,n03790512,n06874185,n04468005,n00007846
+

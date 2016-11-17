@@ -1,6 +1,5 @@
+raise RuntimeError('deprecated, use extract_bboxes.py with --randomize-bboxes instead')
 """
-Crops the ILSVRC2014 Detection Challenge images using the bounding boxes
-for a given synset
 """
 from __future__ import division
 from __future__ import print_function
@@ -40,7 +39,6 @@ if __name__ == '__main__':
     for data in iter_boxes(args.bbox_folder, args.wnid, keep_wnid=False,
                            min_distinct_wnid=int(args.min_distinct_wnid),
                            present_wnid=args.present_wnid.split(',')):
-
         try:
             # the train set works with this one
             tar_folder = os.path.join(basename, data.folder + '.tar')

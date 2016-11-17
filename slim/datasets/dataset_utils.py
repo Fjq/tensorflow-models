@@ -72,6 +72,9 @@ def download_and_uncompress_tarball(tarball_url, dataset_dir):
   """
   filename = tarball_url.split('/')[-1]
   filepath = os.path.join(dataset_dir, filename)
+  if os.path.exists(filepath):
+    print('File "{}" already exists, doing nothing.'.format(filepath))
+    return
 
   def _progress(count, block_size, total_size):
     sys.stdout.write('\r>> Downloading %s %.1f%%' % (

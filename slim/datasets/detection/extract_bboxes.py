@@ -7,6 +7,7 @@ from __future__ import print_function
 
 import sys, os, tarfile, argparse
 from xml.etree import cElementTree
+from random import uniform
 
 from PIL import Image
 
@@ -22,15 +23,16 @@ class Bboxes(object):
         return len(self.bboxes)
 
 
-def iter_boxes(bbox_folder, wnid, keep_wnid=True, min_distinct_wnid=1,
-               present_wnid=None):
+def iter_boxes(bbox_folder,
+               required_wnid=None,
+               forbidden_wnid=None,
+               bbox_wnid=None,
+               min_distinct_wnid=1):
     """
-    If `keep_wnid` == False, then we will *ignore* images that contain at
-    least one element of that `wnid`
     `min_distinct_wnid`: images with less than `min_distinct_wnid` distinct
     wnid will be ignored
-    `present_wnid` : list of wnid that must be in an image for it to be
-    considered
+    `image_has_wnid` : list of wnid that must be in an image for it to be
+    considered (at least one of them is fine)
     """
     for root, dirs, files in os.walk(bbox_folder):
         print('in ' + root)
@@ -49,25 +51,30 @@ def iter_boxes(bbox_folder, wnid, keep_wnid=True, min_distinct_wnid=1,
             size = [int(size.find(what).text) for what in ['height', 'width']]
 
             bboxes = Bboxes()
-            skip_image = False
-            has_present_wnid = False
+
+            has_required_wnid = False
+            has_forbidden_wnid = False
+
             unique_wnid = set()
             for obj in data.findall('object'):
                 name = obj.find('name').text
                 unique_wnid.add(name)
-                if present_wnid is None \
-                        or has_present_wnid \
-                        or name in present_wnid:
-                    has_present_wnid = True
 
-                if keep_wnid:
-                    if name != wnid:
-                        continue
-                # ignore that wnid
-                else:
-                    if name == wnid:
-                        skip_image = True
-                        break
+                if required_wnid is None \
+                        or has_required_wnid \
+                        or name in required_wnid:
+                    has_required_wnid = True
+
+                if forbidden_wnid is not None \
+                        and name in forbidden_wnid:
+                    has_forbidden_wnid = True
+                    break
+
+                # if we care about whhich bbox we use, then continue if it's not
+                # the right one
+                if bbox_wnid is not None \
+                        and name not in bbox_wnid:
+                    continue
 
                 bbox = obj.find('bndbox')
                 bbox = [int(bbox.find(what).text) for what in
@@ -85,6 +92,14 @@ def iter_boxes(bbox_folder, wnid, keep_wnid=True, min_distinct_wnid=1,
                 bbox[2] = min(bbox[2], bbox[3])
                 bbox[3] = max(bbox[2], bbox[3])
 
+                # bigger bounding box
+                h = bbox[1] - bbox[0]
+                w = bbox[3] - bbox[2]
+                bbox[0] -= h/2
+                bbox[1] += h/2
+                bbox[2] -= w/2
+                bbox[3] += w/2
+
                 bbox[0] = max(bbox[0], 0.)
                 bbox[1] = min(bbox[1], 1.)
                 bbox[2] = max(bbox[2], 0.)
@@ -92,9 +107,14 @@ def iter_boxes(bbox_folder, wnid, keep_wnid=True, min_distinct_wnid=1,
 
                 bboxes.append(bbox)
 
+            # print('----------')
+            # print(has_required_wnid)
+            # print(has_forbidden_wnid)
+            # print(len(bboxes))
+            # print(len(unique_wnid))
             # there are a few reasons for which we just discard that image
-            if skip_image \
-                    or not has_present_wnid \
+            if not has_required_wnid \
+                    or has_forbidden_wnid \
                     or len(bboxes) == 0 \
                     or len(unique_wnid) < min_distinct_wnid:
                 continue
@@ -126,16 +146,27 @@ if __name__ == '__main__':
     parser.add_argument('image_tar', help='images')
     parser.add_argument('bbox_folder',
                         help='root directory for .xml bounding boxes')
-    parser.add_argument('wnid', help='wnid you want to search for')
-    parser.add_argument('--present-wnid',
+    parser.add_argument('--bbox-wnid', help='wnid for which you want the bbox')
+
+    parser.add_argument('--required-wnid',
                         help='wnid that you want in the image (comma-separated)')
+    parser.add_argument('--forbidden-wnid',
+                        help='wnid you *dont* want in the image (comma-separated)')
+
     parser.add_argument('output_dir', help='where we will write the .JPEGs')
     parser.add_argument('--nb-output-subdirs',
                         help='so that we don\'t have too many files in a given folder',
                         default=10, nargs='?', type=int)
+
     parser.add_argument('--min-distinct-wnid',
                         help='only keeps images with at least that many distinct wnid',
                         default=1, type=int)
+
+    # parser.add_argument('--randomize-boxes', action='store_true',
+                       # help='ignore the bboxes and use 5 random ones')
+    parser.add_argument('--full-image', action='store_true',
+                       help='no box return the full image')
+
     args = parser.parse_args()
     print(args)
 
@@ -145,9 +176,16 @@ if __name__ == '__main__':
     if not os.path.exists(args.output_dir):
         os.mkdir(args.output_dir)
 
+    bbox_wnid = args.bbox_wnid.split(',') if args.bbox_wnid is not None else None
+    required_wnid = args.required_wnid.split(',') if args.required_wnid is not None else None
+    forbidden_wnid = args.forbidden_wnid.split(',') if args.forbidden_wnid is not None else None
+
     i = 0
-    for data in iter_boxes(args.bbox_folder, args.wnid, min_distinct_wnid=int(args.min_distinct_wnid),
-                           present_wnid=args.present_wnid.split(',')):
+    for data in iter_boxes(args.bbox_folder,
+                           bbox_wnid=bbox_wnid,
+                           min_distinct_wnid=int(args.min_distinct_wnid),
+                           required_wnid=required_wnid,
+                           forbidden_wnid=forbidden_wnid):
 
         try:
             # the train set works with this one
@@ -160,14 +198,36 @@ if __name__ == '__main__':
             tar_folder = tar
 
         img = Image.open(tar_folder.extractfile(fname))
-        # print(fname)
-        for bbox in data.bboxes:
+
+        # yes this is pretty hackish
+        if args.full_image:
+            bboxes = [[0.,1.,0.,1.]]
+            # width, height = img.size
+            # h = uniform(.05, .6)
+            # w = h * height / width
+            # left up right low
+
+            # left up corner
+            # bboxes.append([0,h, 0,w])
+            # right up corner
+            # bboxes.append([0,h,1-w,1])
+            # left bottom
+            # bboxes.append([1-h,1,0,w])
+            # right bottom
+            # bboxes.append([1-h,1,1-w,1])
+            # center
+            # bboxes.append([(1-h)/2, (1+h)/2,  (1-w)/2, (1+w)/2])
+        else:
+            bboxes = data.bboxes
+
+        for bbox in bboxes:
             out_fname = os.path.join(args.output_dir,
                                      str(i % args.nb_output_subdirs),
                                      'image_%i.JPEG' % i)
             out_dir = os.path.dirname(out_fname)
             if not os.path.exists(out_dir):
                 os.mkdir(out_dir)
+            # img.save(out_fname)
             extract_bbox(img, out_fname, bbox)
             i += 1
             if i % 100 == 0:

@@ -441,11 +441,23 @@ def main(_):
           common_queue_capacity=20 * FLAGS.batch_size,
           common_queue_min=10 * FLAGS.batch_size)
       [image, label] = provider.get(['image', 'label'])
+      image = tf.image.convert_image_dtype(image, dtype=tf.float32)
       label -= FLAGS.labels_offset
 
       train_image_size = FLAGS.train_image_size or network_fn.default_image_size
 
+      # tf.image_summary('before prepro', tf.expand_dims(image, 0))
+
+      from common import prepare_pos, prepare_neg
+
+      # print(image_preprocessing_fn(image, train_image_size, train_image_size).dtype)
+      # print(tf.random_crop(image, [ru,ru,3]).dtype)
+      image = tf.cond(tf.equal(label, 1),
+                      lambda: prepare_pos(image),
+                      lambda: prepare_neg(image))
+
       image = image_preprocessing_fn(image, train_image_size, train_image_size)
+      # tf.image_summary('after prepro', tf.expand_dims(image, 0))
 
       images, labels = tf.train.batch(
           [image, label],
@@ -456,6 +468,12 @@ def main(_):
           labels, dataset.num_classes - FLAGS.labels_offset)
       batch_queue = slim.prefetch_queue.prefetch_queue(
           [images, labels], capacity=2 * deploy_config.num_clones)
+
+      images_trans = images[:20]
+      labels_trans = tf.cast(tf.reshape(labels[:20,1], [-1,1,1,1]), tf.float32)
+      labels_trans = tf.tile(labels_trans, [1,299,5,3])
+      im_lb = tf.concat(2, [images_trans, labels_trans])
+      tf.image_summary('image_batch', im_lb, max_images=20)
 
     ####################
     # Define the model #

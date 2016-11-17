@@ -28,7 +28,7 @@ from preprocessing import preprocessing_factory
 slim = tf.contrib.slim
 
 tf.app.flags.DEFINE_integer(
-    'batch_size', 100, 'The number of samples in each batch.')
+    'batch_size', 3, 'The number of samples in each batch.')
 
 tf.app.flags.DEFINE_integer(
     'max_num_batches', None,
@@ -129,30 +129,33 @@ def main(_):
 
     eval_image_size = FLAGS.eval_image_size or network_fn.default_image_size
 
-    from common import prepare_pos, prepare_neg
-
-    # print(image_preprocessing_fn(image, train_image_size, train_image_size).dtype)
     # print(tf.random_crop(image, [ru,ru,3]).dtype)
-    image = tf.cond(tf.equal(label, 1),
-                    lambda: prepare_pos(image),
-                    lambda: prepare_neg(image),
-                    )
+    # image = tf.cond(tf.equal(label, 1),
+                    # lambda: image,
+                    # lambda: tf.random_crop(image, [ru,ru,3])
+                    # )
 
-    image = image_preprocessing_fn(image, eval_image_size, eval_image_size)
+    from common import prepare_neg
+
+    image = prepare_neg(image)
+    eval_iage_size = FLAGS.eval_image_size or network_fn.default_image_size
+    image_preprocessing_fn(image, eval_image_size, eval_image_size)
 
     images, labels = tf.train.batch(
         [image, label],
-        batch_size=FLAGS.batch_size,
+        batch_size=20,
         num_threads=FLAGS.num_preprocessing_threads,
-        capacity=5 * FLAGS.batch_size)
+        capacity=20)
+    # images = tf.expand_dims(image, 0)
 
-    # tf.image_summary('input', images, max_images=20)
+    tf.image_summary('input', images, max_images=20)
     # tf.image_summary('labels', tf.reshape(tf.cast(labels[:20], tf.uint8) * 255, [1,1,20,1]))
 
     ####################
     # Define the model #
     ####################
-    logits, _ = network_fn(images)
+    logits, endpoints = network_fn(images)
+    logits = endpoints['Predictions']
 
     if FLAGS.moving_average_decay:
       variable_averages = tf.train.ExponentialMovingAverage(
@@ -164,34 +167,64 @@ def main(_):
       variables_to_restore = slim.get_variables_to_restore()
 
     # tf.image_summary('logits', tf.reshape(tf.cast(logits[:20], tf.uint8) * 255, [1,1,20,1]))
-    predictions = tf.argmax(logits, 1)
-    labels = tf.squeeze(labels)
+    # predictions = tf.argmax(logits, 1)
+    tf.image_summary('logits', tf.reshape(logits, [-1,1,2,1]), max_images=20)
 
-    print(images.get_shape())
-    print(labels.get_shape())
+    prepool = endpoints['PrePool']
+    shape = prepool.get_shape().as_list()
+    nb, height, width, chan = shape
+    prepool = tf.reshape(prepool, [shape[0] * shape[1] * shape[2], shape[3]])
+    with tf.variable_scope('InceptionResnetV2', 'InceptionResnetV2', [prepool], reuse=True), tf.variable_scope('Logits'):
+        logits2 = slim.fully_connected(prepool, dataset.num_classes, activation_fn=None,
+                                       scope='Logits')
+        # logits2 = tf.nn.softmax(logits2)
+        logits2 = tf.reshape(logits2, shape[:3] + [dataset.num_classes])
+        logits2 = tf.pad(logits2, [[0,0], [0,1], [0,1], [0,0]])
+        logits2 = tf.transpose(logits2, perm=[0,1,3,2])
+        # logits2 = tf.reshape(logits2, [shape[0], shape[1] , -1, 1])
+        logits2 = tf.reshape(logits2, [1, nb * (height+1), -1, 1])
+        # logits2 = tf.cast(logits2 * 255., tf.uint8)
+
+    tf.image_summary('logits2', logits2, max_images=20)
+    # predictions = tf.reshape(logits, [-1,2])
+    # prepool = tf.Print(prepool, [prepool.get_shape()], 'prepool')
+
+    # fc_weights =
+    # slim.get_unique_variable('InceptionResnetV2/Logits/Logits/weights')
+    # print(shape)
+
+    # labels = tf.squeeze(labels)
+
+    # print(images.get_shape())
+    # print(labels.get_shape())
+    # images_trans = images[:20]
+    # labels_trans = tf.cast(tf.reshape(labels[:20], [-1,1,1,1]), tf.float32)
+    # labels_trans = tf.tile(labels_trans, [1,299,10,3])
+
+    # pred_trans = tf.reshape(tf.cast(predictions[:20], tf.float32), [-1,1,1,1])
+    # pred_trans = tf.tile(pred_trans, [1,299,10,3])
+    # im_lb = tf.concat(2, [images_trans, labels_trans, pred_trans])
+    # tf.image_summary('image_batch', im_lb, max_images=20)
+
     images_trans = images[:20]
-    labels_trans = tf.cast(tf.reshape(labels[:20], [-1,1,1,1]), tf.float32)
-    labels_trans = tf.tile(labels_trans, [1,299,10,3])
-
-    pred_trans = tf.reshape(tf.cast(predictions[:20], tf.float32), [-1,1,1,1])
-    pred_trans = tf.tile(pred_trans, [1,299,10,3])
-    im_lb = tf.concat(2, [images_trans, labels_trans, pred_trans])
+    labels_trans = tf.cast(tf.reshape(logits[:20], [-1,1,2,1]), tf.float32)
+    labels_trans = tf.tile(labels_trans, [1,299,1,3])
+    im_lb = tf.concat(2, [images_trans, labels_trans])
     tf.image_summary('image_batch', im_lb, max_images=20)
 
-
     # Define the metrics:
-    names_to_values, names_to_updates = slim.metrics.aggregate_metric_map({
-        'Accuracy': slim.metrics.streaming_accuracy(predictions, labels),
-        'Recall@5': slim.metrics.streaming_recall_at_k(
-            logits, labels, 5),
-    })
+    # names_to_values, names_to_updates = slim.metrics.aggregate_metric_map({
+        # 'Accuracy': slim.metrics.streaming_accuracy(predictions, labels),
+        # 'Recall@5': slim.metrics.streaming_recall_at_k(
+            # logits, labels, 5),
+    # })
 
     # Print the summaries to screen.
-    for name, value in names_to_values.iteritems():
-      summary_name = 'eval/%s' % name
-      op = tf.scalar_summary(summary_name, value, collections=[])
-      op = tf.Print(op, [value], summary_name)
-      tf.add_to_collection(tf.GraphKeys.SUMMARIES, op)
+    # for name, value in names_to_values.iteritems():
+    #   summary_name = 'eval/%s' % name
+    #   op = tf.scalar_summary(summary_name, value, collections=[])
+    #   op = tf.Print(op, [value], summary_name)
+    #   tf.add_to_collection(tf.GraphKeys.SUMMARIES, op)
 
     # TODO(sguada) use num_epochs=1
     if FLAGS.max_num_batches:
@@ -211,8 +244,9 @@ def main(_):
         master=FLAGS.master,
         checkpoint_path=checkpoint_path,
         logdir=FLAGS.eval_dir,
-        num_evals=num_batches,
-        eval_op=names_to_updates.values(),
+        eval_op=[logits, logits2],
+        num_evals=1,
+        final_op=[logits, logits2],
         variables_to_restore=variables_to_restore)
 
 

@@ -5,9 +5,9 @@ for a given synset
 from __future__ import division
 from __future__ import print_function
 
-import sys, os, tarfile, argparse
+import os, tarfile, argparse
 from xml.etree import cElementTree
-from random import uniform
+import random
 
 from PIL import Image
 
@@ -166,6 +166,7 @@ if __name__ == '__main__':
                        # help='ignore the bboxes and use 5 random ones')
     parser.add_argument('--full-image', action='store_true',
                        help='no box return the full image')
+    parser.add_argument('--random-crop', action='store_true')
 
     args = parser.parse_args()
     print(args)
@@ -201,11 +202,15 @@ if __name__ == '__main__':
 
         # yes this is pretty hackish
         if args.full_image:
-            bboxes = [[0.,1.,0.,1.]]
-            # width, height = img.size
-            # h = uniform(.05, .6)
-            # w = h * height / width
-            # left up right low
+            bboxes = [[0., 1., 0., 1.]]
+        elif args.random_crop:
+            width, height = img.size
+            h = random.uniform(0.05, .6)
+            w = h * height / width
+            offset_y = random.uniform(0., 1 - h)
+            offset_x = random.uniform(0., 1 - w)
+            bboxes = [[offset_y, offset_y + h,
+                       offset_x, offset_x + w]]
 
             # left up corner
             # bboxes.append([0,h, 0,w])

@@ -95,10 +95,10 @@ def iter_boxes(bbox_folder,
                 # bigger bounding box
                 h = bbox[1] - bbox[0]
                 w = bbox[3] - bbox[2]
-                bbox[0] -= h/2
-                bbox[1] += h/2
-                bbox[2] -= w/2
-                bbox[3] += w/2
+                bbox[0] -= h/10
+                bbox[1] += h/10
+                bbox[2] -= w/10
+                bbox[3] += w/10
 
                 bbox[0] = max(bbox[0], 0.)
                 bbox[1] = min(bbox[1], 1.)
